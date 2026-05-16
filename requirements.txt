@@ -3,3 +3,5 @@ numpy
 xgboost
 scikit-learn
 joblib
+fastapi
+uvicorn

@@ -37,10 +37,14 @@ def create_features(df):
     df['day'] = df['datetime'].dt.day
     df['is_weekend'] = df['dayofweek'].isin([5, 6]).astype(int)
     
-    # Simple lag features (Demand 24 hours ago, 48 hours ago)
-    # Note: For strict forecasting, we need to be careful with lag features.
+    # Cyclical encoding for hour (makes 23:00 close to 00:00)
+    df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
+    df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
+    
+    # Simple lag features
     df['lag_24h'] = df['demand_mw'].shift(24)
     df['lag_48h'] = df['demand_mw'].shift(48)
+    df['lag_168h'] = df['demand_mw'].shift(168) # 1 week ago
     
     return df
 
@@ -49,7 +53,8 @@ df_features = create_features(df)
 # Drop rows with NaN from shifting
 df_features = df_features.dropna()
 
-features = ['hour', 'dayofweek', 'month', 'day', 'is_weekend', 'lag_24h', 'lag_48h']
+features = ['hour', 'dayofweek', 'month', 'day', 'is_weekend', 
+            'hour_sin', 'hour_cos', 'lag_24h', 'lag_48h', 'lag_168h']
 target_demand = 'demand_mw'
 targets_generation = ['gas', 'liquid_fuel', 'coal', 'hydro', 'solar', 'wind', 
                       'india_bheramara_hvdc', 'india_tripura', 'india_adani', 'nepal']

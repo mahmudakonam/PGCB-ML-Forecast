@@ -9,7 +9,7 @@ from datetime import timedelta
 
 # URL to your MAIN repository's pgcb_data.csv
 # UPDATE THIS URL once your main repo is public on GitHub!
-DATA_URL = "https://raw.githubusercontent.com/mahmudakon/PGCB-Power-Data-Visualizer/main/pgcb_data.csv"
+DATA_URL = "https://raw.githubusercontent.com/mahmudakonam/PGCB-Power-Data-Visualizer/main/pgcb_data.csv"
 
 def download_data():
     print("Downloading latest data from main repository...")

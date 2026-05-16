@@ -1,0 +1,10 @@
+# Ignore downloaded data
+pgcb_data.csv
+
+# Ignore python caches
+__pycache__/
+*.pyc
+
+# DO NOT ignore the model files (demand_model.json, gen_model.pkl) 
+# because GitHub Actions needs them to run the predictions!
+venv/

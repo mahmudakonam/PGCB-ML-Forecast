@@ -1,0 +1,35 @@
+name: Generate Power Forecast
+
+on:
+  schedule:
+    # Run every 6 hours (adjust as needed)
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  run-forecast:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+        
+      - name: Run Prediction Script
+        run: python predict.py
+        
+      - name: Commit and Push Forecast
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add forecast.json
+          # Only commit if forecast.json has changed
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update power demand forecast"
+          git push

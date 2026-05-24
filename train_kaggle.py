@@ -84,22 +84,37 @@ demand_model.fit(X_train, y_train_demand,
                  eval_set=[(X_valid, y_valid_demand)],
                  verbose=50)
 
+# 3b. TRAIN DEMAND FORECAST MODEL (Random Forest)
+print("Training Demand Forecasting Model (Random Forest)...")
+demand_rf_model = RandomForestRegressor(
+    n_estimators=200, 
+    max_depth=12, 
+    random_state=42, 
+    n_jobs=-1
+)
+demand_rf_model.fit(X_train, y_train_demand)
+
 # 4. TRAIN GENERATION MIX MODEL (Random Forest Multi-Output)
 print("Training Generation Mix Model...")
-# We use the predicted demand as an additional feature for the generation model!
+# We use the predicted demand (ensemble/average for generalizability or XGBoost) as an additional feature
 X_train_gen = X_train.copy()
-X_train_gen['predicted_demand'] = demand_model.predict(X_train)
+X_train_gen['predicted_demand'] = (demand_model.predict(X_train) + demand_rf_model.predict(X_train)) / 2
 
 X_valid_gen = X_valid.copy()
-X_valid_gen['predicted_demand'] = demand_model.predict(X_valid)
+X_valid_gen['predicted_demand'] = (demand_model.predict(X_valid) + demand_rf_model.predict(X_valid)) / 2
 
 gen_model = RandomForestRegressor(n_estimators=50, max_depth=10, random_state=42, n_jobs=-1)
 gen_model.fit(X_train_gen, y_train_gen)
 
 # 5. EVALUATE
 print("\n--- Evaluation ---")
-demand_preds = demand_model.predict(X_valid)
-print(f"Demand MAE: {mean_absolute_error(y_valid_demand, demand_preds):.2f} MW")
+demand_preds_xgb = demand_model.predict(X_valid)
+demand_preds_rf = demand_rf_model.predict(X_valid)
+demand_preds_ensemble = (demand_preds_xgb + demand_preds_rf) / 2
+
+print(f"XGBoost Demand MAE: {mean_absolute_error(y_valid_demand, demand_preds_xgb):.2f} MW")
+print(f"Random Forest Demand MAE: {mean_absolute_error(y_valid_demand, demand_preds_rf):.2f} MW")
+print(f"Ensemble Demand MAE: {mean_absolute_error(y_valid_demand, demand_preds_ensemble):.2f} MW")
 
 gen_preds = gen_model.predict(X_valid_gen)
 print(f"Generation Mix MAE: {mean_absolute_error(y_valid_gen, gen_preds):.2f} MW")
@@ -107,6 +122,7 @@ print(f"Generation Mix MAE: {mean_absolute_error(y_valid_gen, gen_preds):.2f} MW
 # 6. SAVE MODELS FOR PRODUCTION
 print("\nSaving models for GitHub Actions deployment...")
 demand_model.save_model('demand_model.json')
+joblib.dump(demand_rf_model, 'demand_rf_model.pkl')
 joblib.dump(gen_model, 'gen_model.pkl')
 
-print("Training Complete! Download 'demand_model.json' and 'gen_model.pkl' from Kaggle.")
+print("Training Complete! Download 'demand_model.json', 'demand_rf_model.pkl', and 'gen_model.pkl' from Kaggle.")

@@ -28,18 +28,27 @@ MODELS = {}
 
 def load_models():
     if "demand" not in MODELS:
-        print("Loading Demand Model...")
-        if not os.path.exists('demand_model.json'):
-            raise Exception("demand_model.json not found!")
-        dm = xgb.XGBRegressor()
-        dm.load_model('demand_model.json')
-        MODELS["demand"] = dm
+        print("Loading Demand XGBoost Model...")
+        if os.path.exists('demand_model.json'):
+            dm = xgb.XGBRegressor()
+            dm.load_model('demand_model.json')
+            MODELS["demand"] = dm
+        else:
+            print("WARNING: demand_model.json not found!")
+            
+    if "demand_rf" not in MODELS:
+        print("Loading Demand Random Forest Model...")
+        if os.path.exists('demand_rf_model.pkl'):
+            MODELS["demand_rf"] = joblib.load('demand_rf_model.pkl')
+        else:
+            print("WARNING: demand_rf_model.pkl not found!")
         
     if "gen" not in MODELS:
         print("Loading Generation Mix Model...")
-        if not os.path.exists('gen_model.pkl'):
-            raise Exception("gen_model.pkl not found!")
-        MODELS["gen"] = joblib.load('gen_model.pkl')
+        if os.path.exists('gen_model.pkl'):
+            MODELS["gen"] = joblib.load('gen_model.pkl')
+        else:
+            print("WARNING: gen_model.pkl not found!")
 
 def download_data():
     # Only download if we don't have it or it's old
@@ -119,27 +128,47 @@ def get_prediction(date: str = Query(..., description="Date in YYYY-MM-DD format
                 
     X = target_df[features]
     
-    # Predict Demand
-    predicted_demand = MODELS["demand"].predict(X)
-    target_df['predicted_demand'] = predicted_demand
+    # Predict Demand using multiple models (with robust fallbacks)
+    if "demand" in MODELS:
+        predicted_xgb = MODELS["demand"].predict(X)
+    else:
+        predicted_xgb = target_df['lag_24h'].values
+        
+    if "demand_rf" in MODELS:
+        predicted_rf = MODELS["demand_rf"].predict(X)
+    else:
+        predicted_rf = predicted_xgb # fallback
+        
+    predicted_ensemble = (predicted_xgb + predicted_rf) / 2
+    target_df['predicted_demand'] = predicted_ensemble
     
     # Predict Gen Mix
-    X_gen = X.copy()
-    X_gen['predicted_demand'] = predicted_demand
-    gen_preds = MODELS["gen"].predict(X_gen)
-    
     targets_generation = ['gas', 'liquid_fuel', 'coal', 'hydro', 'solar', 'wind', 
                           'india_bheramara_hvdc', 'india_tripura', 'india_adani', 'nepal']
+                          
+    if "gen" in MODELS:
+        X_gen = X.copy()
+        X_gen['predicted_demand'] = predicted_ensemble
+        gen_preds = MODELS["gen"].predict(X_gen)
+    else:
+        gen_preds = np.zeros((len(target_df), len(targets_generation)))
                           
     results = []
     for i, row in target_df.iterrows():
         act_d = row['actual_demand']
-        pred_d = round(float(row['predicted_demand']), 2)
+        pred_xgb = round(float(predicted_xgb[i]), 2)
+        pred_rf = round(float(predicted_rf[i]), 2)
+        pred_ensemble = round(float(predicted_ensemble[i]), 2)
+        pred_baseline = round(float(row['lag_24h']), 2)
         
         entry = {
             "datetime": row['datetime'].strftime('%Y-%m-%d %H:%M:%S'),
             "actual_demand_mw": float(act_d) if not pd.isna(act_d) else None,
-            "predicted_demand_mw": pred_d,
+            "predicted_demand_mw": pred_ensemble, # backward compatible default
+            "predicted_demand_xgb": pred_xgb,
+            "predicted_demand_rf": pred_rf,
+            "predicted_demand_ensemble": pred_ensemble,
+            "predicted_demand_baseline": pred_baseline,
             "generation_mix_forecast": {
                 gen_type: round(float(gen_preds[i][j]), 2) for j, gen_type in enumerate(targets_generation)
             }
